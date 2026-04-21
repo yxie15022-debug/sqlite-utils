@@ -1231,11 +1231,16 @@ def ingest(path, table, load_extension):
     current_columns = set(table_obj.columns_dict.keys())
     lines = sys.stdin
     line_number = 0
+    is_first_non_empty = True
     for line in lines:
         stripped = line.strip()
         if not stripped:
             continue
         line_number += 1
+        if is_first_non_empty:
+            if stripped.startswith('\ufeff'):
+                stripped = stripped[1:]
+            is_first_non_empty = False
         try:
             doc = json.loads(stripped)
         except json.decoder.JSONDecodeError as ex:

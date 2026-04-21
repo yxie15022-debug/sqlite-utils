@@ -1230,17 +1230,23 @@ def ingest(path, table, load_extension):
 
     current_columns = set(table_obj.columns_dict.keys())
     lines = sys.stdin
+    line_number = 0
     for line in lines:
-        line = line.strip()
-        if not line:
+        stripped = line.strip()
+        if not stripped:
             continue
+        line_number += 1
         try:
-            doc = json.loads(line)
+            doc = json.loads(stripped)
         except json.decoder.JSONDecodeError as ex:
-            raise click.ClickException("Invalid JSON: {}".format(ex))
+            raise click.ClickException(
+                "Invalid JSON at line {}: {}".format(line_number, ex)
+            )
         if not isinstance(doc, dict):
             raise click.ClickException(
-                "Each line must be a JSON object, got: {}".format(repr(doc)[:100])
+                "Line {} must be a JSON object, got: {}".format(
+                    line_number, repr(doc)[:100]
+                )
             )
         doc_keys = set(doc.keys())
         new_columns = doc_keys - current_columns

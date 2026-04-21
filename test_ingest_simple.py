@@ -80,7 +80,7 @@ def main():
         print('PASSED\n')
         
         print('=' * 50)
-        print('Test 4: Invalid JSON')
+        print('Test 4: Invalid JSON with line number')
         print('=' * 50)
         result = runner.invoke(
             cli.cli,
@@ -90,7 +90,48 @@ def main():
         print(f'Exit code: {result.exit_code}')
         print(f'Output: {result.output}')
         assert result.exit_code == 1
-        assert 'Invalid JSON' in result.output
+        assert 'Invalid JSON at line 1' in result.output
+        print('PASSED\n')
+        
+        print('=' * 50)
+        print('Test 5: Empty lines should be skipped, line numbers exclude empty lines')
+        print('=' * 50)
+        # Empty lines before, between, after - should be skipped
+        # Line number should be 1, 2, 3 for the actual JSON lines
+        result = runner.invoke(
+            cli.cli,
+            ['ingest', db_path, 'chickens'],
+            input='\n{"name": "A"}\n\n{"name": "B"}\n\nnot valid\n'
+        )
+        print(f'Exit code: {result.exit_code}')
+        print(f'Output: {result.output}')
+        assert result.exit_code == 1
+        # The invalid JSON is at logical line 3 (after 2 valid JSONs, empty lines skipped)
+        assert 'Invalid JSON at line 3' in result.output
+        print('PASSED\n')
+        
+        print('=' * 50)
+        print('Test 6: Empty lines in valid input - should succeed')
+        print('=' * 50)
+        db = Database(db_path)
+        count_before = db['chickens'].count
+        db.close()
+        
+        result = runner.invoke(
+            cli.cli,
+            ['ingest', db_path, 'chickens'],
+            input='\n\n{"name": "Daisy"}\n\n{"name": "Molly"}\n\n'
+        )
+        print(f'Exit code: {result.exit_code}')
+        if result.exit_code != 0:
+            print(f'Output: {result.output}')
+        assert result.exit_code == 0
+        
+        db = Database(db_path)
+        count_after = db['chickens'].count
+        print(f'Count before: {count_before}, Count after: {count_after}')
+        assert count_after == count_before + 2
+        db.close()
         print('PASSED\n')
         
         print('=' * 50)

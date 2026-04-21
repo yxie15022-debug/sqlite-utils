@@ -1199,6 +1199,58 @@ def _find_variables(tb, vars):
 
 
 @cli.command()
+@click.argument(
+    "path",
+    type=click.Path(file_okay=True, dir_okay=False, allow_dash=False),
+    required=True,
+)
+@click.argument("table")
+@load_extension_option
+def ingest(path, table, load_extension):
+    """
+    Ingest newline-delimited JSON from stdin into an existing table.
+
+    Reads one JSON object per line from standard input and inserts them
+    into the specified table. The table must already exist.
+
+    New columns are automatically added as TEXT type when first encountered.
+
+    Example:
+
+    \b
+        echo '{"name": "Lila"}' | sqlite-utils ingest data.db chickens
+    """
+    db = sqlite_utils.Database(path)
+    _register_db_for_cleanup(db)
+    _load_extensions(db, load_extension)
+
+    table_obj = db.table(table)
+    if not table_obj.exists():
+        raise click.ClickException("Table '{}' does not exist".format(table))
+
+    current_columns = set(table_obj.columns_dict.keys())
+    lines = sys.stdin
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            doc = json.loads(line)
+        except json.decoder.JSONDecodeError as ex:
+            raise click.ClickException("Invalid JSON: {}".format(ex))
+        if not isinstance(doc, dict):
+            raise click.ClickException(
+                "Each line must be a JSON object, got: {}".format(repr(doc)[:100])
+            )
+        doc_keys = set(doc.keys())
+        new_columns = doc_keys - current_columns
+        for col in new_columns:
+            table_obj.add_column(col, str)
+            current_columns.add(col)
+        table_obj.insert(doc)
+
+
+@cli.command()
 @insert_upsert_options()
 @click.option(
     "--ignore", is_flag=True, default=False, help="Ignore records if pk already exists"

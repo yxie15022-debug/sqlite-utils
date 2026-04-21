@@ -135,6 +135,69 @@ def main():
         print('PASSED\n')
         
         print('=' * 50)
+        print('Test 7: UTF-8 BOM on first non-empty line should be stripped')
+        print('=' * 50)
+        # UTF-8 BOM is \ufeff
+        db = Database(db_path)
+        count_before = db['chickens'].count
+        db.close()
+        
+        # BOM at the start of first non-empty line
+        result = runner.invoke(
+            cli.cli,
+            ['ingest', db_path, 'chickens'],
+            input='\ufeff{"name": "BomTest1"}\n{"name": "BomTest2"}\n'
+        )
+        print(f'Exit code: {result.exit_code}')
+        if result.exit_code != 0:
+            print(f'Output: {result.output}')
+        assert result.exit_code == 0
+        
+        db = Database(db_path)
+        count_after = db['chickens'].count
+        print(f'Count before: {count_before}, Count after: {count_after}')
+        assert count_after == count_before + 2
+        
+        # Check the data was inserted correctly
+        bom_test1 = list(db['chickens'].rows_where('name = ?', ['BomTest1']))
+        bom_test2 = list(db['chickens'].rows_where('name = ?', ['BomTest2']))
+        print(f'BomTest1: {bom_test1}')
+        print(f'BomTest2: {bom_test2}')
+        assert len(bom_test1) == 1
+        assert len(bom_test2) == 1
+        db.close()
+        print('PASSED\n')
+        
+        print('=' * 50)
+        print('Test 8: UTF-8 BOM after empty lines (first non-empty) should be stripped')
+        print('=' * 50)
+        db = Database(db_path)
+        count_before = db['chickens'].count
+        db.close()
+        
+        # Empty lines before, then BOM on first non-empty line
+        result = runner.invoke(
+            cli.cli,
+            ['ingest', db_path, 'chickens'],
+            input='\n\n\ufeff{"name": "BomTest3"}\n'
+        )
+        print(f'Exit code: {result.exit_code}')
+        if result.exit_code != 0:
+            print(f'Output: {result.output}')
+        assert result.exit_code == 0
+        
+        db = Database(db_path)
+        count_after = db['chickens'].count
+        print(f'Count before: {count_before}, Count after: {count_after}')
+        assert count_after == count_before + 1
+        
+        bom_test3 = list(db['chickens'].rows_where('name = ?', ['BomTest3']))
+        print(f'BomTest3: {bom_test3}')
+        assert len(bom_test3) == 1
+        db.close()
+        print('PASSED\n')
+        
+        print('=' * 50)
         print('ALL TESTS PASSED!')
         print('=' * 50)
 

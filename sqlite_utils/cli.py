@@ -1232,6 +1232,10 @@ def ingest(path, table, load_extension):
     lines = sys.stdin
     line_number = 0
     is_first_non_empty = True
+    
+    docs_to_insert = []
+    all_columns = set()
+    
     for line in lines:
         stripped = line.strip()
         if not stripped:
@@ -1253,12 +1257,42 @@ def ingest(path, table, load_extension):
                     line_number, repr(doc)[:100]
                 )
             )
-        doc_keys = set(doc.keys())
-        new_columns = doc_keys - current_columns
-        for col in new_columns:
-            table_obj.add_column(col, str)
-            current_columns.add(col)
-        table_obj.insert(doc)
+        docs_to_insert.append((line_number, doc))
+        all_columns.update(doc.keys())
+    
+    new_columns = all_columns - current_columns
+    for col in new_columns:
+        table_obj.add_column(col, str)
+    
+    from sqlite_utils.db import quote_identifier
+    
+    table_name_quoted = quote_identifier(table)
+    
+    old_isolation_level = db.conn.isolation_level
+    try:
+        db.conn.isolation_level = None
+        db.conn.execute("BEGIN TRANSACTION")
+        
+        for line_number, doc in docs_to_insert:
+            columns = list(doc.keys())
+            placeholders = ["?"] * len(columns)
+            columns_quoted = [quote_identifier(c) for c in columns]
+            sql = "INSERT INTO {} ({}) VALUES ({})".format(
+                table_name_quoted,
+                ", ".join(columns_quoted),
+                ", ".join(placeholders)
+            )
+            try:
+                db.conn.execute(sql, list(doc.values()))
+            except Exception as ex:
+                db.conn.execute("ROLLBACK")
+                raise click.ClickException(
+                    "Error inserting line {}: {}".format(line_number, ex)
+                )
+        
+        db.conn.execute("COMMIT")
+    finally:
+        db.conn.isolation_level = old_isolation_level
 
 
 @cli.command()

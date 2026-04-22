@@ -198,6 +198,74 @@ def main():
         print('PASSED\n')
         
         print('=' * 50)
+        print('Test 9: Transaction rollback - insert error should rollback all')
+        print('=' * 50)
+        # Create a table with primary key constraint
+        db = Database(db_path)
+        db['test_pk'].create({'id': int, 'name': str}, pk='id')
+        # Insert initial data
+        db['test_pk'].insert({'id': 1, 'name': 'Existing'})
+        initial_count = db['test_pk'].count
+        db.close()
+        
+        # Try to insert data where the 3rd row has duplicate id
+        # This should fail and rollback all inserts from this batch
+        result = runner.invoke(
+            cli.cli,
+            ['ingest', db_path, 'test_pk'],
+            input='{"id": 10, "name": "New1"}\n{"id": 11, "name": "New2"}\n{"id": 1, "name": "Duplicate"}\n'
+        )
+        print(f'Exit code: {result.exit_code}')
+        print(f'Output: {result.output}')
+        assert result.exit_code == 1
+        # Error message should include line number
+        assert 'line 3' in result.output or 'line 3' in result.output.lower()
+        
+        # Verify that the new rows were rolled back
+        db = Database(db_path)
+        final_count = db['test_pk'].count
+        print(f'Initial count: {initial_count}, Final count: {final_count}')
+        # Should be the same as initial count - no new rows should have been inserted
+        assert final_count == initial_count
+        
+        # Verify only the original row exists
+        rows = list(db['test_pk'].rows)
+        print(f'Rows: {rows}')
+        assert len(rows) == 1
+        assert rows[0]['id'] == 1
+        assert rows[0]['name'] == 'Existing'
+        db.close()
+        print('PASSED\n')
+        
+        print('=' * 50)
+        print('Test 10: Successful batch insert with transaction')
+        print('=' * 50)
+        db = Database(db_path)
+        initial_count = db['test_pk'].count
+        db.close()
+        
+        result = runner.invoke(
+            cli.cli,
+            ['ingest', db_path, 'test_pk'],
+            input='{"id": 20, "name": "Batch1"}\n{"id": 21, "name": "Batch2"}\n{"id": 22, "name": "Batch3"}\n'
+        )
+        print(f'Exit code: {result.exit_code}')
+        if result.exit_code != 0:
+            print(f'Output: {result.output}')
+        assert result.exit_code == 0
+        
+        db = Database(db_path)
+        final_count = db['test_pk'].count
+        print(f'Initial count: {initial_count}, Final count: {final_count}')
+        assert final_count == initial_count + 3
+        
+        rows = list(db['test_pk'].rows_where('id >= 20 order by id'))
+        print(f'New rows: {rows}')
+        assert len(rows) == 3
+        db.close()
+        print('PASSED\n')
+        
+        print('=' * 50)
         print('ALL TESTS PASSED!')
         print('=' * 50)
 
